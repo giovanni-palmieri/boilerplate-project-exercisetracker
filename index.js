@@ -23,15 +23,9 @@ const ExerciseSchema = new mongoose.Schema({
 const UserSchema = new mongoose.Schema({
   username: String,
 });
-const LogSchema = new mongoose.Schema({
-  username: String,
-  count: Number,
-  log: [{ description: String, duration: Number, date: String }],
-});
 
 const User = mongoose.model("User", UserSchema);
 const Exercise = mongoose.model("Exercise", ExerciseSchema);
-const Log = mongoose.model("Log", LogSchema);
 
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/views/index.html");
@@ -42,24 +36,7 @@ app.post("/api/users", function (req, res) {
 
   user
     .save()
-    .then((data) => {
-      Log.findOneAndUpdate(
-        {
-          _id: data._id,
-        },
-        {
-          $setOnInsert: {
-            username: data.username,
-            _id: data._id,
-            count: 0,
-            log: [],
-          },
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      )
-        .exec()
-        .then(() => res.send(data));
-    })
+    .then((data) => res.send(data))
     .catch((err) => res.status(500).send(err));
 });
 
@@ -88,60 +65,40 @@ app.post("/api/users/:_id/exercises", function (req, res) {
         date: date ? new Date(date) : new Date(),
       });
 
-      Log.findOneAndUpdate(
-        {
+      exercise.save().then((exercise) => {
+        const result = {
+          _id: user._id,
           username: user.username,
-        },
-        {
-          $setOnInsert: {
-            username: user.username,
-            _id: user._id,
-          },
-          $push: {
-            log: {
-              description: exercise.description,
-              duration: exercise.duration,
-              date: exercise.date,
-              _id: exercise._id,
-            },
-          },
-          $inc: { count: 1 },
-        },
-        { new: true, upsert: true, setDefaultsOnInsert: true },
-      )
-        .exec()
-        .then(() => {
-          exercise.save().then((exercise) => {
-            const result = {
-              _id: user._id,
-              username: user.username,
-              description: exercise.description,
-              duration: exercise.duration,
-              date: exercise.date,
-            };
-            res.send(result);
-          });
-        });
+          description: exercise.description,
+          duration: exercise.duration,
+          date: exercise.date,
+        };
+        res.send(result);
+      });
     });
 });
 
 app.get("/api/users/:_id/logs", function (req, res) {
   const _id = req.params._id;
-  Log.findById(_id)
-    .select({
-      _id: true,
-      count: true,
-      log: true,
-      username: true,
-    })
+
+  User.findById(_id)
     .exec()
-    .then((logs) => {
-      if (logs) {
-        res.send(logs);
-      } else {
-        res.send({});
-      }
-    });
+    .then((user) =>
+      Exercise.find({ username: user.username })
+        .exec()
+        .then((exercises) => {
+          res.send({
+            username: user.username,
+            count: exercises.length,
+            _id: _id,
+            log: exercises.map(({ description, duration, date }) => ({
+              description,
+              duration,
+              date: new Date(date).toDateString(),
+            })),
+          });
+        }),
+    );
 });
 
 const listener = app.listen(process.env.PORT || 3000, () => {
