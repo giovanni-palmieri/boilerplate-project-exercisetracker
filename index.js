@@ -18,7 +18,7 @@ const ExerciseSchema = new mongoose.Schema({
   username: String,
   description: String,
   duration: Number,
-  date: Date,
+  date: String,
 });
 const UserSchema = new mongoose.Schema({
   username: String,
@@ -62,7 +62,7 @@ app.post("/api/users/:_id/exercises", function (req, res) {
         username: user.username,
         description,
         duration,
-        date: date ? new Date(date) : new Date(),
+        date: date ?? new Date().toISOString().substring(0, 10),
       });
 
       exercise.save().then((exercise) => {
@@ -71,20 +71,25 @@ app.post("/api/users/:_id/exercises", function (req, res) {
           username: user.username,
           description: exercise.description,
           duration: exercise.duration,
-          date: exercise.date,
+          date: new Date(exercise.date).toDateString(),
         };
         res.send(result);
       });
     });
 });
 
-app.get("/api/users/:_id/logs", function (req, res) {
+app.get("/api/users/:_id/logs", async function (req, res) {
   const _id = req.params._id;
+  const from = req.query.from || new Date(0).toISOString().substring(0, 10);
+  const to =
+    req.query.to || new Date(Date.now()).toISOString().substring(0, 10);
+  const limit = Number(req.query.limit) || 0;
 
   User.findById(_id)
     .exec()
     .then((user) =>
-      Exercise.find({ username: user.username })
+      Exercise.find({ username: user.username, date: { $gte: from, $lte: to } })
+        .limit(limit)
         .exec()
         .then((exercises) => {
           res.send({
